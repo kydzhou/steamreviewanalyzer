@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Steam 评价中文分析工具</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Microsoft YaHei UI", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #0f172a;
+        color: #e5e7eb;
+      }
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 32px 18px;
+      }
+      .card {
+        background: #111827;
+        border: 1px solid #263244;
+        border-radius: 16px;
+        box-shadow: 0 16px 40px rgb(0 0 0 / 0.25);
+        padding: 22px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+      p {
+        color: #9ca3af;
+      }
+      label {
+        display: block;
+        margin: 14px 0 7px;
+        font-weight: 600;
+      }
+      input,
+      select,
+      button {
+        box-sizing: border-box;
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid #374151;
+        padding: 11px 12px;
+        background: #020617;
+        color: #f9fafb;
+        font: inherit;
+      }
+      input[type="checkbox"] {
+        width: auto;
+        margin-right: 8px;
+      }
+      button {
+        margin-top: 20px;
+        cursor: pointer;
+        border: none;
+        background: #2563eb;
+        font-weight: 700;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .status {
+        margin: 18px 0;
+        padding: 12px 14px;
+        border-radius: 10px;
+        background: #172554;
+        color: #bfdbfe;
+        min-height: 24px;
+      }
+      .result {
+        white-space: pre-wrap;
+        line-height: 1.65;
+        background: #020617;
+        border: 1px solid #374151;
+        border-radius: 14px;
+        padding: 18px;
+        min-height: 260px;
+      }
+      .muted {
+        font-size: 13px;
+        color: #9ca3af;
+      }
+      @media (max-width: 820px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card">
+        <h1>Steam 评价中文分析工具</h1>
+        <p>输入 Steam 游戏链接或 App ID，抓取所有语言用户评价，并用中文总结优点和缺点。</p>
+
+        <form id="form">
+          <label for="password" id="password-label" hidden>访问密码</label>
+          <input id="password" type="password" autocomplete="current-password" hidden />
+
+          <label for="steam">Steam 链接 / App ID</label>
+          <input id="steam" required placeholder="例如：https://store.steampowered.com/app/730/CounterStrike_2/" />
+
+          <div class="grid">
+            <div>
+              <label for="max-reviews">抓取数量</label>
+              <input id="max-reviews" type="number" min="0" max="10000000" value="1000" />
+              <div class="muted">0 表示尽量抓取全部</div>
+            </div>
+            <div>
+              <label for="sleep">请求间隔秒</label>
+              <input id="sleep" type="number" min="0" max="10" step="0.1" value="0.5" />
+            </div>
+            <div>
+              <label for="sort">排序方式</label>
+              <select id="sort">
+                <option value="votes_up_desc">点赞数从高到低</option>
+                <option value="steam">Steam 默认顺序</option>
+                <option value="weighted_score_desc">权重分数从高到低</option>
+                <option value="newest">最新评价优先</option>
+                <option value="playtime_desc">游玩时长从高到低</option>
+              </select>
+            </div>
+          </div>
+
+          <label>
+            <input id="use-llm" type="checkbox" />
+            启用 LLM 总结
+          </label>
+          <div class="muted" id="llm-hint">正在读取服务器 LLM 配置...</div>
+
+          <div class="grid">
+            <div>
+              <label for="llm-max">送入 LLM 条数</label>
+              <input id="llm-max" type="number" min="0" max="1000000" value="1200" />
+            </div>
+            <div>
+              <label for="chunk-size">每批条数</label>
+              <input id="chunk-size" type="number" min="1" max="1000" value="80" />
+            </div>
+            <div>
+              <label for="max-chars">单条评价字符数</label>
+              <input id="max-chars" type="number" min="100" max="5000" value="1200" />
+            </div>
+          </div>
+
+          <button id="submit" type="submit">开始分析</button>
+        </form>
+
+        <div class="status" id="status">等待提交任务。</div>
+        <div class="result" id="result">分析结果会显示在这里。</div>
+      </section>
+    </main>
+
+    <script>
+      const form = document.querySelector("#form");
+      const submitButton = document.querySelector("#submit");
+      const statusBox = document.querySelector("#status");
+      const resultBox = document.querySelector("#result");
+      const passwordInput = document.querySelector("#password");
+      const passwordLabel = document.querySelector("#password-label");
+      const useLlmInput = document.querySelector("#use-llm");
+      const llmHint = document.querySelector("#llm-hint");
+
+      let passwordRequired = false;
+
+      function headers() {
+        const items = { "Content-Type": "application/json" };
+        if (passwordRequired) {
+          items["X-App-Password"] = passwordInput.value;
+        }
+        return items;
+      }
+
+      async function loadConfig() {
+        const response = await fetch("/api/config");
+        const config = await response.json();
+        passwordRequired = Boolean(config.password_required);
+        passwordInput.hidden = !passwordRequired;
+        passwordLabel.hidden = !passwordRequired;
+        useLlmInput.disabled = !config.llm_available;
+        llmHint.textContent = config.llm_available
+          ? `服务器已配置 LLM：${config.model}`
+          : "服务器未配置 OPENAI_API_KEY，只能使用本地统计版总结。";
+      }
+
+      async function poll(taskId) {
+        const response = await fetch(`/api/tasks/${taskId}`, { headers: headers() });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        const task = await response.json();
+        statusBox.textContent = task.message;
+        if (task.status === "done") {
+          resultBox.textContent = task.summary || "";
+          submitButton.disabled = false;
+          return;
+        }
+        if (task.status === "error") {
+          resultBox.textContent = task.error || "分析失败";
+          submitButton.disabled = false;
+          return;
+        }
+        setTimeout(() => poll(taskId).catch(showError), 1500);
+      }
+
+      function showError(error) {
+        statusBox.textContent = "请求失败";
+        resultBox.textContent = error.message || String(error);
+        submitButton.disabled = false;
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        submitButton.disabled = true;
+        statusBox.textContent = "正在提交任务...";
+        resultBox.textContent = "分析中，请稍候...";
+
+        const payload = {
+          steam_link_or_app_id: document.querySelector("#steam").value.trim(),
+          max_reviews: Number(document.querySelector("#max-reviews").value),
+          sleep_seconds: Number(document.querySelector("#sleep").value),
+          sort_by: document.querySelector("#sort").value,
+          use_llm: useLlmInput.checked,
+          llm_max_reviews: Number(document.querySelector("#llm-max").value),
+          chunk_size: Number(document.querySelector("#chunk-size").value),
+          max_review_chars: Number(document.querySelector("#max-chars").value),
+        };
+
+        try {
+          const response = await fetch("/api/analyze", {
+            method: "POST",
+            headers: headers(),
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+          const data = await response.json();
+          poll(data.task_id).catch(showError);
+        } catch (error) {
+          showError(error);
+        }
+      });
+
+      loadConfig().catch(showError);
+    </script>
+  </body>
+</html>

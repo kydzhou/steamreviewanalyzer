@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+env/
+.env
+
+build/
+dist/
+*.spec
+*.exe
+
+steam_review_summary.md
+steam_reviews.jsonl
+reviews.jsonl
+*.log
