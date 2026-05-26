@@ -30,12 +30,11 @@ python -m uvicorn web_app:app --host 127.0.0.1 --port 8000
 http://127.0.0.1:8000
 ```
 
-如果要启用 LLM，总结 API Key 放在环境变量中，不要写到前端：
+如果要启用 LLM，在网页里手动填写 API Key。API Key 不写入服务器配置文件，只会按你的选择缓存在当前浏览器本地。
+
+如果要给网页加访问密码，可以设置环境变量：
 
 ```powershell
-$env:OPENAI_API_KEY="你的 API Key"
-$env:OPENAI_BASE_URL="https://api.openai.com/v1"
-$env:OPENAI_MODEL="gpt-4o-mini"
 $env:APP_PASSWORD="网页访问密码"
 python -m uvicorn web_app:app --host 127.0.0.1 --port 8000
 ```
@@ -64,9 +63,6 @@ nano /opt/steam-review/.env
 示例：
 
 ```env
-OPENAI_API_KEY=你的 API Key
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
 APP_PASSWORD=你的网页访问密码
 ```
 
@@ -85,7 +81,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=/opt/steam-review
-EnvironmentFile=/opt/steam-review/.env
+EnvironmentFile=-/opt/steam-review/.env
 ExecStart=/opt/steam-review/.venv/bin/uvicorn web_app:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5

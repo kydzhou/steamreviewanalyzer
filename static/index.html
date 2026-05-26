@@ -137,20 +137,39 @@
             <input id="use-llm" type="checkbox" />
             启用 LLM 总结
           </label>
-          <div class="muted" id="llm-hint">正在读取服务器 LLM 配置...</div>
+          <div class="muted" id="llm-hint">API Key 只会缓存在当前浏览器本地，不写入服务器配置文件。</div>
 
-          <div class="grid">
-            <div>
-              <label for="llm-max">送入 LLM 条数</label>
-              <input id="llm-max" type="number" min="0" max="1000000" value="1200" />
+          <div id="llm-settings" hidden>
+            <label for="llm-api-key">LLM API Key</label>
+            <input id="llm-api-key" type="password" autocomplete="off" placeholder="每次使用前确认，可缓存在本浏览器" />
+            <label>
+              <input id="cache-llm-key" type="checkbox" checked />
+              缓存在本浏览器
+            </label>
+            <div class="grid">
+              <div>
+                <label for="llm-base-url">Base URL</label>
+                <input id="llm-base-url" value="https://api.openai.com/v1" />
+              </div>
+              <div>
+                <label for="llm-model">模型</label>
+                <input id="llm-model" value="gpt-4o-mini" />
+              </div>
+              <div>
+                <label for="llm-max">送入 LLM 条数</label>
+                <input id="llm-max" type="number" min="0" max="1000000" value="1200" />
+              </div>
             </div>
-            <div>
-              <label for="chunk-size">每批条数</label>
-              <input id="chunk-size" type="number" min="1" max="1000" value="80" />
-            </div>
-            <div>
-              <label for="max-chars">单条评价字符数</label>
-              <input id="max-chars" type="number" min="100" max="5000" value="1200" />
+
+            <div class="grid">
+              <div>
+                <label for="chunk-size">每批条数</label>
+                <input id="chunk-size" type="number" min="1" max="1000" value="80" />
+              </div>
+              <div>
+                <label for="max-chars">单条评价字符数</label>
+                <input id="max-chars" type="number" min="100" max="5000" value="1200" />
+              </div>
             </div>
           </div>
 
@@ -170,6 +189,11 @@
       const passwordInput = document.querySelector("#password");
       const passwordLabel = document.querySelector("#password-label");
       const useLlmInput = document.querySelector("#use-llm");
+      const llmSettings = document.querySelector("#llm-settings");
+      const llmApiKeyInput = document.querySelector("#llm-api-key");
+      const llmBaseUrlInput = document.querySelector("#llm-base-url");
+      const llmModelInput = document.querySelector("#llm-model");
+      const cacheLlmKeyInput = document.querySelector("#cache-llm-key");
       const llmHint = document.querySelector("#llm-hint");
 
       let passwordRequired = false;
@@ -188,11 +212,16 @@
         passwordRequired = Boolean(config.password_required);
         passwordInput.hidden = !passwordRequired;
         passwordLabel.hidden = !passwordRequired;
-        useLlmInput.disabled = !config.llm_available;
-        llmHint.textContent = config.llm_available
-          ? `服务器已配置 LLM：${config.model}`
-          : "服务器未配置 OPENAI_API_KEY，只能使用本地统计版总结。";
+        llmBaseUrlInput.value = localStorage.getItem("steamReview.llmBaseUrl") || config.default_base_url;
+        llmModelInput.value = localStorage.getItem("steamReview.llmModel") || config.default_model;
+        llmApiKeyInput.value = localStorage.getItem("steamReview.llmApiKey") || "";
       }
+
+      function updateLlmSettingsVisibility() {
+        llmSettings.hidden = !useLlmInput.checked;
+      }
+
+      useLlmInput.addEventListener("change", updateLlmSettingsVisibility);
 
       async function poll(taskId) {
         const response = await fetch(`/api/tasks/${taskId}`, { headers: headers() });
@@ -232,10 +261,25 @@
           sleep_seconds: Number(document.querySelector("#sleep").value),
           sort_by: document.querySelector("#sort").value,
           use_llm: useLlmInput.checked,
+          llm_api_key: useLlmInput.checked ? llmApiKeyInput.value.trim() : "",
+          llm_base_url: llmBaseUrlInput.value.trim(),
+          llm_model: llmModelInput.value.trim(),
           llm_max_reviews: Number(document.querySelector("#llm-max").value),
           chunk_size: Number(document.querySelector("#chunk-size").value),
           max_review_chars: Number(document.querySelector("#max-chars").value),
         };
+
+        if (useLlmInput.checked && !payload.llm_api_key) {
+          showError(new Error("启用 LLM 时需要填写 API Key。"));
+          return;
+        }
+        if (cacheLlmKeyInput.checked) {
+          localStorage.setItem("steamReview.llmApiKey", llmApiKeyInput.value);
+          localStorage.setItem("steamReview.llmBaseUrl", llmBaseUrlInput.value);
+          localStorage.setItem("steamReview.llmModel", llmModelInput.value);
+        } else {
+          localStorage.removeItem("steamReview.llmApiKey");
+        }
 
         try {
           const response = await fetch("/api/analyze", {
@@ -253,6 +297,7 @@
         }
       });
 
+      updateLlmSettingsVisibility();
       loadConfig().catch(showError);
     </script>
   </body>

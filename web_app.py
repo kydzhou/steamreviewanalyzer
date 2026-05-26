@@ -29,9 +29,6 @@ from steam_review_analyzer import (
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL)
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 
 @dataclass
@@ -58,6 +55,9 @@ class AnalyzeRequest(BaseModel):
     sleep_seconds: float = Field(default=0.5, ge=0, le=10)
     sort_by: str = Field(default="votes_up_desc")
     use_llm: bool = False
+    llm_api_key: str = ""
+    llm_base_url: str = Field(default=DEFAULT_OPENAI_BASE_URL)
+    llm_model: str = Field(default="gpt-4o-mini")
     llm_max_reviews: int = Field(default=1200, ge=0, le=1_000_000)
     chunk_size: int = Field(default=80, ge=1, le=1000)
     max_review_chars: int = Field(default=1200, ge=100, le=5000)
@@ -109,8 +109,9 @@ def index() -> str:
 def config() -> dict[str, Any]:
     return {
         "password_required": bool(APP_PASSWORD),
-        "llm_available": bool(OPENAI_API_KEY),
-        "model": OPENAI_MODEL if OPENAI_API_KEY else None,
+        "llm_available": True,
+        "default_base_url": DEFAULT_OPENAI_BASE_URL,
+        "default_model": "gpt-4o-mini",
         "sort_choices": REVIEW_SORT_CHOICES,
     }
 
@@ -120,8 +121,8 @@ def analyze(request: AnalyzeRequest, x_app_password: str | None = Header(default
     require_password(x_app_password)
     if request.sort_by not in REVIEW_SORT_CHOICES:
         raise HTTPException(status_code=400, detail=f"未知排序方式：{request.sort_by}")
-    if request.use_llm and not OPENAI_API_KEY:
-        raise HTTPException(status_code=400, detail="服务器未配置 OPENAI_API_KEY，无法启用 LLM 总结")
+    if request.use_llm and not request.llm_api_key.strip():
+        raise HTTPException(status_code=400, detail="启用 LLM 时需要填写 API Key")
 
     task = AnalysisTask(id=str(uuid.uuid4()))
     set_task(task)
@@ -163,9 +164,9 @@ def run_analysis(task_id: str, request: AnalyzeRequest) -> None:
                 app_id,
                 reviews,
                 query_summary,
-                model=OPENAI_MODEL,
-                api_key=OPENAI_API_KEY,
-                base_url=OPENAI_BASE_URL,
+                model=request.llm_model.strip() or "gpt-4o-mini",
+                api_key=request.llm_api_key.strip(),
+                base_url=request.llm_base_url.strip() or DEFAULT_OPENAI_BASE_URL,
                 chunk_size=request.chunk_size,
                 max_llm_reviews=request.llm_max_reviews,
                 max_review_chars=request.max_review_chars,
