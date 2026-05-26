@@ -257,7 +257,7 @@
       }
 
       async function loadConfig() {
-        const response = await fetch("/api/config");
+        const response = await fetch("api/config");
         const config = await response.json();
         passwordRequired = Boolean(config.password_required);
         passwordInput.hidden = !passwordRequired;
@@ -291,7 +291,7 @@
       });
 
       async function poll(taskId) {
-        const response = await fetch(`/api/tasks/${taskId}`, { headers: headers() });
+        const response = await fetch(`api/tasks/${taskId}`, { headers: headers() });
         if (!response.ok) {
           throw new Error(await response.text());
         }
@@ -343,7 +343,7 @@
         saveLocalSettings();
 
         try {
-          const response = await fetch("/api/analyze", {
+          const response = await fetch("api/analyze", {
             method: "POST",
             headers: headers(),
             body: JSON.stringify(payload),

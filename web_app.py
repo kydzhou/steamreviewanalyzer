@@ -68,6 +68,7 @@ TASKS_LOCK = threading.Lock()
 
 app = FastAPI(title="Steam Review Analyzer")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/steam-review/static", StaticFiles(directory=STATIC_DIR), name="steam-review-static")
 
 
 def require_password(x_app_password: str | None) -> None:
@@ -102,10 +103,15 @@ def task_payload(task: AnalysisTask) -> dict[str, Any]:
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
+    return (STATIC_DIR / "nav.html").read_text(encoding="utf-8")
+
+
+@app.get("/steam-review/", response_class=HTMLResponse)
+def steam_review_index() -> str:
     return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
-@app.get("/api/config")
+@app.get("/steam-review/api/config")
 def config() -> dict[str, Any]:
     return {
         "password_required": bool(APP_PASSWORD),
@@ -116,7 +122,7 @@ def config() -> dict[str, Any]:
     }
 
 
-@app.post("/api/analyze")
+@app.post("/steam-review/api/analyze")
 def analyze(request: AnalyzeRequest, x_app_password: str | None = Header(default=None)) -> dict[str, str]:
     require_password(x_app_password)
     if request.sort_by not in REVIEW_SORT_CHOICES:
@@ -131,7 +137,7 @@ def analyze(request: AnalyzeRequest, x_app_password: str | None = Header(default
     return {"task_id": task.id}
 
 
-@app.get("/api/tasks/{task_id}")
+@app.get("/steam-review/api/tasks/{task_id}")
 def task_status(task_id: str, x_app_password: str | None = Header(default=None)) -> dict[str, Any]:
     require_password(x_app_password)
     return task_payload(get_task(task_id))
