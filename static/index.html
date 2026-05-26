@@ -137,15 +137,10 @@
             <input id="use-llm" type="checkbox" />
             启用 LLM 总结
           </label>
-          <div class="muted" id="llm-hint">API Key 只会缓存在当前浏览器本地，不写入服务器配置文件。</div>
 
           <div id="llm-settings" hidden>
             <label for="llm-api-key">LLM API Key</label>
-            <input id="llm-api-key" type="password" autocomplete="off" placeholder="每次使用前确认，可缓存在本浏览器" />
-            <label>
-              <input id="cache-llm-key" type="checkbox" checked />
-              缓存在本浏览器
-            </label>
+            <input id="llm-api-key" type="password" autocomplete="off" placeholder="会自动缓存在当前浏览器" />
             <div class="grid">
               <div>
                 <label for="llm-base-url">Base URL</label>
@@ -193,8 +188,28 @@
       const llmApiKeyInput = document.querySelector("#llm-api-key");
       const llmBaseUrlInput = document.querySelector("#llm-base-url");
       const llmModelInput = document.querySelector("#llm-model");
-      const cacheLlmKeyInput = document.querySelector("#cache-llm-key");
-      const llmHint = document.querySelector("#llm-hint");
+      const steamInput = document.querySelector("#steam");
+      const maxReviewsInput = document.querySelector("#max-reviews");
+      const sleepInput = document.querySelector("#sleep");
+      const sortInput = document.querySelector("#sort");
+      const llmMaxInput = document.querySelector("#llm-max");
+      const chunkSizeInput = document.querySelector("#chunk-size");
+      const maxCharsInput = document.querySelector("#max-chars");
+
+      const defaults = {
+        steam: "",
+        maxReviews: "1000",
+        sleepSeconds: "0.5",
+        sortBy: "votes_up_desc",
+        useLlm: "false",
+        llmApiKey: "",
+        llmBaseUrl: "https://api.openai.com/v1",
+        llmModel: "gpt-4o-mini",
+        llmMaxReviews: "1200",
+        chunkSize: "80",
+        maxReviewChars: "1200",
+        appPassword: "",
+      };
 
       let passwordRequired = false;
 
@@ -206,22 +221,74 @@
         return items;
       }
 
+      function cached(key) {
+        return localStorage.getItem(`steamReview.${key}`) ?? defaults[key];
+      }
+
+      function loadLocalSettings(config) {
+        steamInput.value = cached("steam");
+        maxReviewsInput.value = cached("maxReviews");
+        sleepInput.value = cached("sleepSeconds");
+        sortInput.value = cached("sortBy");
+        useLlmInput.checked = cached("useLlm") === "true";
+        llmApiKeyInput.value = cached("llmApiKey");
+        llmBaseUrlInput.value = cached("llmBaseUrl") || config.default_base_url || defaults.llmBaseUrl;
+        llmModelInput.value = cached("llmModel") || config.default_model || defaults.llmModel;
+        llmMaxInput.value = cached("llmMaxReviews");
+        chunkSizeInput.value = cached("chunkSize");
+        maxCharsInput.value = cached("maxReviewChars");
+        passwordInput.value = cached("appPassword");
+        updateLlmSettingsVisibility();
+      }
+
+      function saveLocalSettings() {
+        localStorage.setItem("steamReview.steam", steamInput.value);
+        localStorage.setItem("steamReview.maxReviews", maxReviewsInput.value);
+        localStorage.setItem("steamReview.sleepSeconds", sleepInput.value);
+        localStorage.setItem("steamReview.sortBy", sortInput.value);
+        localStorage.setItem("steamReview.useLlm", String(useLlmInput.checked));
+        localStorage.setItem("steamReview.llmApiKey", llmApiKeyInput.value);
+        localStorage.setItem("steamReview.llmBaseUrl", llmBaseUrlInput.value);
+        localStorage.setItem("steamReview.llmModel", llmModelInput.value);
+        localStorage.setItem("steamReview.llmMaxReviews", llmMaxInput.value);
+        localStorage.setItem("steamReview.chunkSize", chunkSizeInput.value);
+        localStorage.setItem("steamReview.maxReviewChars", maxCharsInput.value);
+        localStorage.setItem("steamReview.appPassword", passwordInput.value);
+      }
+
       async function loadConfig() {
         const response = await fetch("/api/config");
         const config = await response.json();
         passwordRequired = Boolean(config.password_required);
         passwordInput.hidden = !passwordRequired;
         passwordLabel.hidden = !passwordRequired;
-        llmBaseUrlInput.value = localStorage.getItem("steamReview.llmBaseUrl") || config.default_base_url;
-        llmModelInput.value = localStorage.getItem("steamReview.llmModel") || config.default_model;
-        llmApiKeyInput.value = localStorage.getItem("steamReview.llmApiKey") || "";
+        loadLocalSettings(config);
       }
 
       function updateLlmSettingsVisibility() {
         llmSettings.hidden = !useLlmInput.checked;
       }
 
-      useLlmInput.addEventListener("change", updateLlmSettingsVisibility);
+      useLlmInput.addEventListener("change", () => {
+        updateLlmSettingsVisibility();
+        saveLocalSettings();
+      });
+      [
+        passwordInput,
+        steamInput,
+        maxReviewsInput,
+        sleepInput,
+        sortInput,
+        llmApiKeyInput,
+        llmBaseUrlInput,
+        llmModelInput,
+        llmMaxInput,
+        chunkSizeInput,
+        maxCharsInput,
+      ].forEach((input) => {
+        input.addEventListener("input", saveLocalSettings);
+        input.addEventListener("change", saveLocalSettings);
+      });
 
       async function poll(taskId) {
         const response = await fetch(`/api/tasks/${taskId}`, { headers: headers() });
@@ -256,30 +323,24 @@
         resultBox.textContent = "分析中，请稍候...";
 
         const payload = {
-          steam_link_or_app_id: document.querySelector("#steam").value.trim(),
-          max_reviews: Number(document.querySelector("#max-reviews").value),
-          sleep_seconds: Number(document.querySelector("#sleep").value),
-          sort_by: document.querySelector("#sort").value,
+          steam_link_or_app_id: steamInput.value.trim(),
+          max_reviews: Number(maxReviewsInput.value),
+          sleep_seconds: Number(sleepInput.value),
+          sort_by: sortInput.value,
           use_llm: useLlmInput.checked,
           llm_api_key: useLlmInput.checked ? llmApiKeyInput.value.trim() : "",
           llm_base_url: llmBaseUrlInput.value.trim(),
           llm_model: llmModelInput.value.trim(),
-          llm_max_reviews: Number(document.querySelector("#llm-max").value),
-          chunk_size: Number(document.querySelector("#chunk-size").value),
-          max_review_chars: Number(document.querySelector("#max-chars").value),
+          llm_max_reviews: Number(llmMaxInput.value),
+          chunk_size: Number(chunkSizeInput.value),
+          max_review_chars: Number(maxCharsInput.value),
         };
 
         if (useLlmInput.checked && !payload.llm_api_key) {
           showError(new Error("启用 LLM 时需要填写 API Key。"));
           return;
         }
-        if (cacheLlmKeyInput.checked) {
-          localStorage.setItem("steamReview.llmApiKey", llmApiKeyInput.value);
-          localStorage.setItem("steamReview.llmBaseUrl", llmBaseUrlInput.value);
-          localStorage.setItem("steamReview.llmModel", llmModelInput.value);
-        } else {
-          localStorage.removeItem("steamReview.llmApiKey");
-        }
+        saveLocalSettings();
 
         try {
           const response = await fetch("/api/analyze", {
