@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Steam 赛道分析工具</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Microsoft YaHei UI", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body { margin: 0; background: #0f172a; color: #e5e7eb; }
+      main { max-width: 1280px; margin: 0 auto; padding: 32px 18px; }
+      a { color: #93c5fd; }
+      .card {
+        background: #111827; border: 1px solid #263244; border-radius: 16px;
+        box-shadow: 0 16px 40px rgb(0 0 0 / 0.22); padding: 20px; margin-bottom: 18px;
+      }
+      h1 { margin: 0 0 8px; font-size: 28px; }
+      h2 { margin: 0 0 12px; font-size: 20px; }
+      p, .muted { color: #9ca3af; }
+      label { display: block; margin: 12px 0 7px; font-weight: 600; }
+      input, button, textarea {
+        box-sizing: border-box; width: 100%; border-radius: 10px; border: 1px solid #374151;
+        padding: 10px 12px; background: #020617; color: #f9fafb; font: inherit;
+      }
+      textarea { min-height: 220px; resize: vertical; line-height: 1.55; }
+      input[type="checkbox"] { width: auto; margin-right: 8px; }
+      button { cursor: pointer; border: none; background: #2563eb; font-weight: 700; }
+      button.secondary { background: #334155; }
+      button:disabled { cursor: not-allowed; opacity: 0.6; }
+      .analysis-layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr); gap: 18px; align-items: start; }
+      .tag-sidebar { position: sticky; top: 18px; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      .distribution-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+      .distribution-card { font-size: 14px; }
+      .distribution-card h2 { font-size: 18px; }
+      .distribution-table { border: 1px solid #334155; border-bottom: 0; }
+      .three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+      .actions button { width: auto; }
+      .option-row { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
+      .option-row label { display: inline-flex; align-items: center; margin: 0; font-weight: 600; }
+      .tag-list { max-height: 520px; overflow: auto; padding: 8px; border: 1px solid #263244; border-radius: 12px; background: #020617; }
+      .tag-row {
+        display: grid; grid-template-columns: 38px 1fr 72px; gap: 8px; align-items: center;
+        margin: 6px 0; padding: 8px; border: 1px solid #263244; border-radius: 10px; background: #0f172a;
+      }
+      .tag-row.included { border-color: #2563eb; background: #172554; }
+      .tag-row.excluded { border-color: #991b1b; background: #2b1218; }
+      .exclude-button, .clear-button {
+        width: auto; margin: 0; padding: 5px 9px; border-radius: 8px; background: #334155; font-weight: 800;
+      }
+      .exclude-button.active { background: #991b1b; }
+      .clear-button { background: #1f2937; font-size: 13px; }
+      .tag-name { cursor: pointer; user-select: none; line-height: 1.45; }
+      .tag-name:hover { color: #93c5fd; }
+      .tag-state { color: #cbd5e1; font-size: 12px; text-align: right; }
+      .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+      .stat { padding: 14px; border: 1px solid #263244; border-radius: 12px; background: #020617; }
+      .stat .value { font-size: 24px; font-weight: 800; }
+      .dist-row {
+        display: grid; grid-template-columns: 1fr 74px; align-items: center;
+        border: 1px solid #334155; border-bottom: 0; font-variant-numeric: tabular-nums;
+      }
+      .dist-row:last-child { border-bottom: 1px solid #334155; }
+      .dist-row > div { min-height: 34px; padding: 7px 8px; border-right: 1px solid #334155; display: flex; align-items: center; }
+      .dist-row > div:last-child { justify-content: flex-end; border-right: 0; font-weight: 700; }
+      .status { padding: 12px 14px; border-radius: 10px; background: #172554; color: #bfdbfe; }
+      .table-wrap { max-height: 460px; overflow: auto; border: 1px solid #263244; border-radius: 12px; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th, td { border-bottom: 1px solid #263244; padding: 9px; text-align: left; vertical-align: top; }
+      th { color: #bfdbfe; background: #0f172a; position: sticky; top: 0; }
+      .matrix-wrap { overflow: auto; border: 1px solid #263244; border-radius: 12px; }
+      .matrix-table { min-width: 760px; font-size: 12px; table-layout: fixed; }
+      .matrix-table th, .matrix-table td { border: 1px solid #334155; padding: 7px 8px; vertical-align: middle; }
+      .matrix-table th { background: #172554; color: #dbeafe; white-space: nowrap; }
+      .matrix-table th:first-child, .matrix-table td:first-child { width: 100px; font-weight: 800; background: #0f172a; color: #f8fafc; }
+      .matrix-cell {
+        display: grid; grid-template-columns: 48px 64px; justify-content: end; gap: 0;
+        min-width: 112px; font-variant-numeric: tabular-nums; line-height: 1.2;
+      }
+      .matrix-cell .count { border-right: 1px solid #334155; padding-right: 8px; text-align: right; color: #f8fafc; }
+      .matrix-cell .percent { padding-left: 8px; text-align: right; color: #cbd5e1; font-weight: 700; }
+      .matrix-total { text-align: right; display: block; font-variant-numeric: tabular-nums; }
+      .llm-output { white-space: pre-wrap; line-height: 1.7; color: #e5e7eb; }
+      @media (max-width: 900px) {
+        .analysis-layout, .grid, .distribution-grid, .three, .stat-grid { grid-template-columns: 1fr; }
+        .tag-sidebar { position: static; }
+        .dist-row { grid-template-columns: 1fr 74px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p><a href="/">返回工具导航</a></p>
+      <section class="card">
+        <h1>Steam 赛道分析工具</h1>
+        <p>使用 Steam 官方 API 获取 tag 与游戏清单，快速查看赛道价格带、评论量、好评率和头部游戏。</p>
+        <p class="muted">点击分析后会先提示匹配条数，再选择本次分析数量。</p>
+      </section>
+
+      <div class="analysis-layout">
+        <div class="analysis-panel">
+          <section class="card">
+            <h2>分析结果</h2>
+            <div id="status" class="status">请先更新 tag 清单并选择至少一个包含 tag。</div>
+            <div id="summary" class="stat-grid" style="margin-top: 14px"></div>
+          </section>
+
+          <section class="distribution-grid">
+            <div class="card distribution-card"><h2>评论数量分布</h2><div id="review-dist"></div></div>
+            <div class="card distribution-card"><h2>价格分布</h2><div id="price-dist"></div></div>
+            <div class="card distribution-card"><h2>好评率分布</h2><div id="positive-dist"></div></div>
+          </section>
+
+          <section class="card">
+            <h2>价格 × 评论数分布</h2>
+            <div id="price-review-matrix" class="matrix-wrap"></div>
+          </section>
+
+          <section class="card">
+            <h2>代表游戏列表（评论数 &gt; 10000，按评论数排序，最多 300 条）</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>AppID</th>
+                    <th>名称</th>
+                    <th>评论数</th>
+                    <th>好评率</th>
+                    <th>价格</th>
+                    <th>链接</th>
+                  </tr>
+                </thead>
+                <tbody id="rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>LLM 市场分析</h2>
+            <div id="llm-status" class="status">完成一次市场分析后，可在右侧填写 API 配置并生成中文市场分析。</div>
+            <div id="llm-result" class="llm-output" style="margin-top: 14px"></div>
+          </section>
+        </div>
+
+        <aside class="tag-sidebar card">
+          <h2>选择赛道 Tag</h2>
+          <div class="actions">
+            <button id="load-tags" type="button" class="secondary">更新 Steam 官方 tag 清单</button>
+          </div>
+          <label for="tag-search">搜索 tag</label>
+          <input id="tag-search" placeholder="支持英文或中文，例如 Roguelike、Survival、生存、合作" />
+          <p class="muted">点击 tag 名称设为包含，点击左侧叉号设为排除。已包含/已排除的 tag 会显示在列表最上方。</p>
+          <div id="tag-list" class="tag-list"></div>
+          <div class="option-row">
+            <label>
+              <input id="include-released" type="checkbox" checked />
+              已发售
+            </label>
+            <label>
+              <input id="include-unreleased" type="checkbox" />
+              未发售
+            </label>
+          </div>
+          <div class="actions">
+            <button id="analyze" type="button">开始分析</button>
+            <button id="reset" type="button" class="secondary">清空选择</button>
+          </div>
+          <hr style="border: 0; border-top: 1px solid #263244; margin: 18px 0" />
+          <h2>LLM 市场分析</h2>
+          <label for="llm-api-key">API Key</label>
+          <input id="llm-api-key" type="password" placeholder="保存在浏览器 localStorage" />
+          <label for="llm-base-url">Base URL</label>
+          <input id="llm-base-url" placeholder="https://api.openai.com/v1" />
+          <label for="llm-model">模型</label>
+          <input id="llm-model" placeholder="gpt-4o-mini" />
+          <div class="actions">
+            <button id="llm-analyze" type="button" class="secondary">用 LLM 分析当前数据</button>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <script>
+      const STORAGE = "steamMarketAnalyzer.state";
+      let tags = [];
+      let apps = [];
+      let includeTags = new Map();
+      let excludeTags = new Map();
+
+      const statusBox = document.querySelector("#status");
+      const tagSearch = document.querySelector("#tag-search");
+      const includeReleased = document.querySelector("#include-released");
+      const includeUnreleased = document.querySelector("#include-unreleased");
+      const llmStatus = document.querySelector("#llm-status");
+      const llmResult = document.querySelector("#llm-result");
+      const llmApiKey = document.querySelector("#llm-api-key");
+      const llmBaseUrl = document.querySelector("#llm-base-url");
+      const llmModel = document.querySelector("#llm-model");
+      function saveState() {
+        localStorage.setItem(STORAGE, JSON.stringify({
+          tags, include: [...includeTags], exclude: [...excludeTags],
+          includeReleased: includeReleased.checked,
+          includeUnreleased: includeUnreleased.checked,
+          llmApiKey: llmApiKey.value,
+          llmBaseUrl: llmBaseUrl.value,
+          llmModel: llmModel.value,
+        }));
+      }
+
+      function loadState() {
+        try {
+          const state = JSON.parse(localStorage.getItem(STORAGE) || "{}");
+          tags = sortTags(state.tags || []);
+          includeTags = new Map(state.include || []);
+          excludeTags = new Map(state.exclude || []);
+          includeReleased.checked = state.includeReleased !== false;
+          includeUnreleased.checked = state.includeUnreleased === true;
+          llmApiKey.value = state.llmApiKey || "";
+          llmBaseUrl.value = state.llmBaseUrl || "https://api.openai.com/v1";
+          llmModel.value = state.llmModel || "gpt-4o-mini";
+        } catch {
+          tags = [];
+        }
+      }
+
+      function setStatus(message) { statusBox.textContent = message; }
+
+      async function loadTags() {
+        setStatus("正在更新 Steam 官方 tag 清单...");
+        const response = await fetch("api/tags");
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        tags = sortTags(data.tags || []);
+        saveState();
+        renderTags();
+        setStatus(`已更新 tag 清单：${tags.length} 个。`);
+      }
+
+      function renderTags() {
+        const query = tagSearch.value.trim().toLowerCase();
+        const visible = sortTags(tags).filter((tag) => tagLabel(tag).toLowerCase().includes(query));
+        const container = document.querySelector("#tag-list");
+        container.innerHTML = "";
+        const selectedIds = new Set([...includeTags.keys(), ...excludeTags.keys()]);
+        const selected = [...selectedIds].map(tagById).filter(Boolean);
+        const unselected = visible.filter((tag) => !selectedIds.has(String(tag.id)));
+        [...sortTags(selected), ...unselected].forEach((tag) => container.append(createTagRow(tag)));
+      }
+
+      function createTagRow(tag) {
+        const key = String(tag.id);
+        const included = includeTags.has(key);
+        const excluded = excludeTags.has(key);
+        const row = document.createElement("div");
+        row.className = `tag-row${included ? " included" : ""}${excluded ? " excluded" : ""}`;
+
+        const excludeButton = document.createElement("button");
+        excludeButton.type = "button";
+        excludeButton.className = `exclude-button${excluded ? " active" : ""}`;
+        excludeButton.textContent = "×";
+        excludeButton.title = "排除这个 tag";
+        excludeButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          excludeTags.set(key, tagLabel(tag));
+          includeTags.delete(key);
+          saveState();
+          renderTags();
+        });
+
+        const name = document.createElement("div");
+        name.className = "tag-name";
+        name.textContent = tagLabel(tag);
+        name.title = "设为包含 tag";
+        name.addEventListener("click", () => {
+          includeTags.set(key, tagLabel(tag));
+          excludeTags.delete(key);
+          saveState();
+          renderTags();
+        });
+
+        const state = document.createElement("div");
+        state.className = "tag-state";
+        if (included || excluded) {
+          const clearButton = document.createElement("button");
+          clearButton.type = "button";
+          clearButton.className = "clear-button";
+          clearButton.textContent = included ? "包含" : "排除";
+          clearButton.title = "点击清除选择";
+          clearButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+            includeTags.delete(key);
+            excludeTags.delete(key);
+            saveState();
+            renderTags();
+          });
+          state.append(clearButton);
+        } else {
+          state.textContent = "未选";
+        }
+
+        row.append(excludeButton, name, state);
+        return row;
+      }
+
+      function tagLabel(tag) {
+        return tag.nameZh && tag.nameZh !== tag.name ? `${tag.name} / ${tag.nameZh}` : tag.name;
+      }
+
+      function tagById(tagId) {
+        const tag = tags.find((item) => String(item.id) === String(tagId));
+        if (tag) return tag;
+        const label = includeTags.get(String(tagId)) || excludeTags.get(String(tagId));
+        return label ? { id: tagId, name: label, nameZh: "" } : null;
+      }
+
+      function sortTags(items) {
+        return [...items].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "en", { sensitivity: "base" }));
+      }
+
+      function labelForTagId(tagId) {
+        const tag = tags.find((item) => String(item.id) === String(tagId));
+        return tag ? tagLabel(tag) : includeTags.get(String(tagId)) || excludeTags.get(String(tagId)) || String(tagId);
+      }
+
+      function selectedLabels(selected) {
+        return [...selected.keys()].map(labelForTagId);
+      }
+
+      function buildPayload(maxResultCount = 1) {
+        return {
+          include_tag_ids: [...includeTags.keys()].map(Number),
+          exclude_tag_ids: [...excludeTags.keys()].map(Number),
+          include_tag_names: selectedLabels(includeTags),
+          max_results: maxResultCount,
+          country_code: "US",
+          language: "english",
+          include_steamspy: false,
+          include_released: includeReleased.checked,
+          include_unreleased: includeUnreleased.checked,
+        };
+      }
+
+      function buildLlmPayload() {
+        return {
+          apps,
+          include_tag_names: selectedLabels(includeTags),
+          exclude_tag_names: selectedLabels(excludeTags),
+          include_released: includeReleased.checked,
+          include_unreleased: includeUnreleased.checked,
+          llm_api_key: llmApiKey.value.trim(),
+          llm_base_url: llmBaseUrl.value.trim() || "https://api.openai.com/v1",
+          llm_model: llmModel.value.trim() || "gpt-4o-mini",
+        };
+      }
+
+      async function analyze() {
+        if (!includeTags.size) {
+          setStatus("请至少选择一个包含 tag。");
+          return;
+        }
+        if (!includeReleased.checked && !includeUnreleased.checked) {
+          setStatus("请至少选择已发售或未发售其中一种。");
+          return;
+        }
+        setStatus("正在从 Steam 官方 API 获取游戏数据...");
+        document.querySelector("#analyze").disabled = true;
+        try {
+          const countPayload = buildPayload(1);
+          saveState();
+          const countResponse = await fetch("api/count", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(countPayload),
+          });
+          if (!countResponse.ok) throw new Error(await countResponse.text());
+          const countData = await countResponse.json();
+          const total = countData.total_matching_records || 0;
+          const requestedCount = chooseAnalysisCount(total);
+          if (!requestedCount) {
+            setStatus(`已取消。当前 tag 组合匹配 ${total.toLocaleString()} 条。`);
+            return;
+          }
+          const payload = buildPayload(requestedCount);
+          const limited = requestedCount < total;
+          const proceed = window.confirm(
+            `当前 tag 组合共匹配 ${total.toLocaleString()} 条 Steam 游戏。\n` +
+              `本次将分析 ${requestedCount.toLocaleString()} 条${limited ? "（指定数量）" : "（全部）"}。\n\n是否继续？`,
+          );
+          if (!proceed) {
+            setStatus(`已取消。当前 tag 组合匹配 ${total.toLocaleString()} 条。`);
+            return;
+          }
+          setStatus(`当前 tag 组合匹配 ${total.toLocaleString()} 条，正在分析前 ${payload.max_results.toLocaleString()} 条...`);
+          const response = await fetch("api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) throw new Error(await response.text());
+          const data = await response.json();
+          apps = dedupeApps(data.apps || []);
+          llmResult.textContent = "";
+          renderAnalysis(data);
+          setStatus(`Steam 总匹配 ${data.total_matching_records.toLocaleString()} 条，本次分析 ${data.analyzed_count.toLocaleString()} 条。`);
+          if (llmApiKey.value.trim()) {
+            await analyzeWithLlm({ skipMissingKeyMessage: true });
+          } else {
+            llmStatus.textContent = "已整理当前市场数据。填写 LLM API Key 后，可生成中文市场分析。";
+          }
+        } catch (error) {
+          setStatus(`分析失败：${error.message || error}`);
+        } finally {
+          document.querySelector("#analyze").disabled = false;
+        }
+      }
+
+      function chooseAnalysisCount(total) {
+        if (total <= 0) return 0;
+        const message =
+          `当前 tag 组合共匹配 ${total.toLocaleString()} 条 Steam 游戏。\n\n` +
+          `输入分析数量，或输入 all 分析全部。`;
+        const input = window.prompt(message, String(Math.min(total, 500)));
+        if (input === null) return 0;
+        const trimmed = input.trim().toLowerCase();
+        if (trimmed === "all" || trimmed === "全部") {
+          return total;
+        }
+        const count = Number(trimmed);
+        if (!Number.isFinite(count) || count <= 0) {
+          window.alert("请输入大于 0 的数字，或输入 all。");
+          return 0;
+        }
+        return Math.floor(count);
+      }
+
+      function renderAnalysis(data) {
+        const reviewValues = apps.map((app) => app.reviewCount).filter(isNumber);
+        const priceValues = apps.map((app) => app.price).filter(isNumber);
+        const freeCount = apps.filter((app) => app.price === 0).length;
+        document.querySelector("#summary").innerHTML = `
+          <div class="stat"><div class="value">${apps.length.toLocaleString()}</div><div>本次分析游戏</div></div>
+          <div class="stat"><div class="value">${formatNumber(median(reviewValues))}</div><div>评论数中位数</div></div>
+          <div class="stat"><div class="value">${formatPrice(median(priceValues))}</div><div>价格中位数</div></div>
+          <div class="stat"><div class="value">${freeCount.toLocaleString()}</div><div>免费游戏数量</div></div>
+        `;
+        renderDistribution("#review-dist", bucketize(apps, (app) => app.reviewCount, [
+          ["0-999", (v) => !isNumber(v) || (v >= 0 && v <= 999)],
+          ["1000-4999", (v) => v >= 1000 && v <= 4999],
+          ["5000-9999", (v) => v >= 5000 && v <= 9999],
+          ["10000+", (v) => v >= 10000],
+        ]));
+        renderDistribution("#price-dist", bucketize(apps, (app) => app.price, [
+          ["$0", (v) => v === 0],
+          ["$0.01 - 9.99", (v) => v > 0 && v <= 9.99],
+          ["$10 - 19.99", (v) => v >= 10 && v <= 19.99],
+          ["$20 - 29.99", (v) => v >= 20 && v <= 29.99],
+          ["$30 - 39.99", (v) => v >= 30 && v <= 39.99],
+          ["$39.99+", (v) => v >= 40],
+        ]));
+        renderDistribution("#positive-dist", bucketize(apps, (app) => app.percentPositive, [
+          ["0-49%", (v) => isNumber(v) && v > 0 && v < 50],
+          ["50-69%", (v) => v >= 50 && v <= 69], ["70-84%", (v) => v >= 70 && v <= 84],
+          ["85-94%", (v) => v >= 85 && v <= 94], ["95%+", (v) => v >= 95],
+        ]));
+        renderPriceReviewMatrix();
+        renderRows([...apps].filter((app) => (app.reviewCount || 0) > 10000).sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0)).slice(0, 300));
+      }
+
+      async function analyzeWithLlm(options = {}) {
+        if (!apps.length) {
+          llmStatus.textContent = "请先完成一次市场分析。";
+          return;
+        }
+        if (!llmApiKey.value.trim()) {
+          if (!options.skipMissingKeyMessage) {
+            llmStatus.textContent = "请先填写 LLM API Key。";
+          }
+          return;
+        }
+        saveState();
+        document.querySelector("#llm-analyze").disabled = true;
+        llmStatus.textContent = "正在调用 LLM 生成市场分析...";
+        llmResult.textContent = "";
+        try {
+          const response = await fetch("api/llm-analysis", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildLlmPayload()),
+          });
+          if (!response.ok) throw new Error(await response.text());
+          const data = await response.json();
+          llmResult.textContent = data.analysis || "";
+          llmStatus.textContent = "LLM 市场分析完成。";
+        } catch (error) {
+          llmStatus.textContent = `LLM 分析失败：${error.message || error}`;
+        } finally {
+          document.querySelector("#llm-analyze").disabled = false;
+        }
+      }
+
+      function bucketize(items, getValue, bucketDefs) {
+        return bucketDefs.map(([label, test]) => ({ label, count: items.filter((item) => test(getValue(item))).length }));
+      }
+
+      function renderDistribution(selector, buckets) {
+        const target = document.querySelector(selector);
+        target.innerHTML = "";
+        const table = document.createElement("div");
+        table.className = "distribution-table";
+        buckets.forEach((bucket) => {
+          const row = document.createElement("div");
+          row.className = "dist-row";
+          row.innerHTML = `<div>${bucket.label}</div><div>${bucket.count}</div>`;
+          table.append(row);
+        });
+        target.append(table);
+      }
+
+      function renderRows(rows) {
+        const body = document.querySelector("#rows");
+        body.innerHTML = "";
+        rows.forEach((app) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${app.appid}</td>
+            <td>${escapeHtml(app.name)}</td>
+            <td>${formatNumber(app.reviewCount)}</td>
+            <td>${isNumber(app.percentPositive) && app.percentPositive > 0 ? `${app.percentPositive}%` : "-"}</td>
+            <td>${app.formattedPrice || formatPrice(app.price)}</td>
+            <td><a href="${app.steamUrl}" target="_blank">Steam</a> · <a href="${app.steamdbUrl}" target="_blank">SteamDB</a></td>
+          `;
+          body.append(row);
+        });
+      }
+
+      function dedupeApps(items) {
+        const seen = new Set();
+        return items.filter((item) => {
+          const key = String(item.appid || "");
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }
+
+      function renderPriceReviewMatrix() {
+        const priceBuckets = [
+          ["$0", (value) => value === 0],
+          ["$0.01 - 9.99", (value) => value > 0 && value <= 9.99],
+          ["$10 - 19.99", (value) => value >= 10 && value <= 19.99],
+          ["$20 - 29.99", (value) => value >= 20 && value <= 29.99],
+          ["$30 - 39.99", (value) => value >= 30 && value <= 39.99],
+          ["$39.99+", (value) => value >= 40],
+        ];
+        const reviewBuckets = [
+          ["< 1000", (value) => isNumber(value) && value < 1000],
+          ["1000 - 4999", (value) => isNumber(value) && value >= 1000 && value <= 4999],
+          ["5000 - 9999", (value) => isNumber(value) && value >= 5000 && value <= 9999],
+          [">= 10000", (value) => isNumber(value) && value >= 10000],
+        ];
+        const columnItems = priceBuckets.map(([, test]) => apps.filter((app) => isNumber(app.price) && test(app.price)));
+        const table = document.createElement("table");
+        table.className = "matrix-table";
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>评价数</th>
+              ${priceBuckets.map(([label]) => `<th>${label}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody></tbody>
+        `;
+        const body = table.querySelector("tbody");
+        reviewBuckets.forEach(([label, test]) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>${label}</td>${columnItems.map((items) => {
+            const count = items.filter((app) => test(app.reviewCount)).length;
+            return matrixCell(count, items.length);
+          }).join("")}`;
+          body.append(row);
+        });
+        const totalRow = document.createElement("tr");
+        totalRow.innerHTML = `<td>总数</td>${columnItems.map((items) => `<td><strong class="matrix-total">${items.length.toLocaleString()}</strong></td>`).join("")}`;
+        body.append(totalRow);
+
+        const target = document.querySelector("#price-review-matrix");
+        target.innerHTML = "";
+        target.append(table);
+      }
+
+      function matrixCell(count, total) {
+        const percent = total ? `${((count / total) * 100).toFixed(2)}%` : "0.00%";
+        return `<td><div class="matrix-cell"><span class="count">${count.toLocaleString()}</span><span class="percent">${percent}</span></div></td>`;
+      }
+
+      function isNumber(value) { return typeof value === "number" && Number.isFinite(value); }
+      function median(values) {
+        const sorted = values.filter(isNumber).sort((a, b) => a - b);
+        if (!sorted.length) return null;
+        const middle = Math.floor(sorted.length / 2);
+        return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+      }
+      function formatNumber(value) { return isNumber(value) ? Math.round(value).toLocaleString() : "-"; }
+      function formatPrice(value) { return isNumber(value) ? (value === 0 ? "Free" : value.toFixed(2)) : "-"; }
+      function escapeHtml(value) {
+        return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+
+      document.querySelector("#load-tags").addEventListener("click", () => loadTags().catch((error) => setStatus(`tag 更新失败：${error.message || error}`)));
+      document.querySelector("#analyze").addEventListener("click", analyze);
+      document.querySelector("#llm-analyze").addEventListener("click", analyzeWithLlm);
+      document.querySelector("#reset").addEventListener("click", () => {
+        includeTags = new Map();
+        excludeTags = new Map();
+        saveState();
+        renderTags();
+      });
+      tagSearch.addEventListener("input", renderTags);
+      [includeReleased, includeUnreleased, llmApiKey, llmBaseUrl, llmModel].forEach((input) => {
+        input.addEventListener("input", saveState);
+        input.addEventListener("change", saveState);
+      });
+      loadState();
+      renderTags();
+      if (!tags.length) {
+        loadTags().catch((error) => setStatus(`tag 更新失败：${error.message || error}`));
+      }
+    </script>
+  </body>
+</html>
